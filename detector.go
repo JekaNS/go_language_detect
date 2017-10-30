@@ -94,7 +94,9 @@ func (d *Detector) ReadClassFromFile(class string, location string) (err error) 
 	w := new(classData)
 	err = dec.Decode(w)
 
-	d.classes[class] = w
+	if len(w.Freqs) > 0 {
+		d.classes[class] = w
+	}
 	return
 }
 
@@ -182,6 +184,14 @@ func (d *Detector) ClearFreqs(min float64) {
 }
 
 func (d * Detector) Detect(text string, langs []string, maxTrials int, maxIterations uint8) (res Response) {
+
+	filteredLangs := []string{}
+	for _, l := range langs {
+		if _, ok := d.classes[l]; ok {
+			filteredLangs = append(filteredLangs, l)
+		}
+	}
+	langs = filteredLangs
 
 	res.Languages = make(map[string]float64, len(d.classes))
 
@@ -367,7 +377,7 @@ func tokenize(text string) (tokens []string) {
 
 
 func getProfileAvailableLanguages(config DetectConfig) []string {
-	res := make([]string,0)
+ 	res := make([]string,0)
 
 	files, err := filepath.Glob(config.ProfilePath + "/" + config.Profile + "/*")
 	if err != nil {
