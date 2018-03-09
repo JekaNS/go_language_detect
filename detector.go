@@ -183,17 +183,22 @@ func (d *Detector) ClearFreqs(min float64) {
 	}
 }
 
-func (d * Detector) Detect(text string, langs []string, maxTrials int, maxIterations uint8) (res Response) {
+func (d * Detector) Detect(text string, langs []string, coefficients map[string]float64, maxTrials int, maxIterations uint8) (res Response) {
+
+	res.Languages = make(map[string]float64, len(d.classes))
 
 	filteredLangs := []string{}
 	for _, l := range langs {
 		if _, ok := d.classes[l]; ok {
-			filteredLangs = append(filteredLangs, l)
+			if _, ok := res.Languages[l]; !ok {
+				res.Languages[l] = 0;
+				filteredLangs = append(filteredLangs, l)
+			}
 		}
 	}
 	langs = filteredLangs
 
-	res.Languages = make(map[string]float64, len(d.classes))
+
 
 	text = string(normalize([]byte(text)))
 
@@ -241,6 +246,9 @@ func (d * Detector) Detect(text string, langs []string, maxTrials int, maxIterat
 	for i := int(0); i < trial; i++ {
 		sum := float64(0)
 		for _, name := range langs {
+			if coef, ok := coefficients[name]; ok {
+				tempScores[name][i] *= coef;
+			}
 			sum += tempScores[name][i]
 		}
 		for _, name := range langs {
@@ -385,11 +393,14 @@ func getProfileAvailableLanguages(config DetectConfig) []string {
 	}
 	regName := regexp.MustCompile("^" + config.ProfilePath + "/" + config.Profile + "/([a-zA-Z0-9]+)$")
 	for _, f := range files {
-		lang := regName.FindStringSubmatch(f)[1]
-		if len(lang) < 2 {
-			continue;
+		match := regName.FindStringSubmatch(f);
+		if len(match) == 2 {
+			lang := regName.FindStringSubmatch(f)[1]
+			if len(lang) < 2 {
+				continue;
+			}
+			res = append(res, lang)
 		}
-		res = append(res, lang)
 	}
 
 	return res

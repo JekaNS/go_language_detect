@@ -36,10 +36,11 @@ var defaultConfig = Cfg {
 }
 
 type httpRequestStruct struct {
-	Text      string   `json:"text"`
-	Languages []string `json:"langs"`
-	MaxTrials int	   `json:"max_trials"`
-	MaxIterations uint8	   `json:"max_iterations"`
+	Text      string   				`json:"text"`
+	Languages []string 				`json:"langs"`
+	Coefficients map[string]float64 `json:"coef"`
+	MaxTrials int	   				`json:"max_trials"`
+	MaxIterations uint8	   			`json:"max_iterations"`
 }
 
 func init() {
@@ -66,7 +67,7 @@ func init() {
 	defaultLanguages = make([]string, len(detection.classes),len(detection.classes))
 
 	counter := 0
-	for lang, _ := range detection.classes {
+	for lang := range detection.classes {
 		defaultLanguages[counter] = lang
 		counter++
 	}
@@ -105,7 +106,7 @@ func detectLanguageHandler(rw http.ResponseWriter, req *http.Request) {
 		requestData.Languages = defaultLanguages
 	}
 
-	response := detection.Detect(requestData.Text, requestData.Languages, requestData.MaxTrials, requestData.MaxIterations);
+	response := detection.Detect(requestData.Text, requestData.Languages, requestData.Coefficients, requestData.MaxTrials, requestData.MaxIterations);
 
 	err = json.NewEncoder(rw).Encode(response)
 	if err != nil {
