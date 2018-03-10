@@ -252,7 +252,9 @@ func (d * Detector) Detect(text string, langs []string, coefficients map[string]
 			sum += tempScores[name][i]
 		}
 		for _, name := range langs {
-			tempScores[name][i] /= sum
+			if sum > 0  {
+				tempScores[name][i] /= sum
+			}
 		}
 	}
 
