@@ -7,6 +7,7 @@ import (
 	"golang.org/x/text/runes"
 	"bytes"
 	"github.com/lestrrat/go-ngram"
+	"github.com/leesper/go_rng"
 	"strings"
 	"fmt"
 	"encoding/xml"
@@ -17,13 +18,20 @@ import (
 	"os"
 	"encoding/gob"
 	"math/rand"
+	"time"
+	"sync"
 )
 
 const ABSTRACT_WIKI_THRESHOLD int = 100
 const ALL_LANGUAGES = "all"
 
+const ALPHA_DEFAULT = 0.5
+const ALPHA_WIDTH = 0.05
+
+const BASE_FREQ = 10000;
+
 const MAX_TRIALS = 15
-const MAX_ITTERATIONS = 30
+const MAX_ITTERATIONS = 255
 const MIN_PROB = 0.000001
 
 
@@ -44,7 +52,7 @@ type Response struct {
 	BestProb float64					`json:"prob"`
 	BestStrict bool						`json:"strict"`
 	Languages map[string]float64 		`json:"langs"`
-	TotalTokens	int						`json:"tokens_total"`
+	TotalTokens	int						`jsgithub.com/leesper/go_rngon:"tokens_total"`
 	TokenProcessed	int					`json:"tokens_processed"`
 }
 
@@ -100,6 +108,25 @@ func (d *Detector) ReadClassFromFile(class string, location string) (err error) 
 	return
 }
 
+func (d *Detector) SaveProfile(name string) error {
+	path := d.config.ProfilePath + "/" + d.config.Profile
+	_ = os.Mkdir(path, os.ModePerm)
+
+	if _,ok := d.classes[name];!ok {
+		return fmt.Errorf("Class not exists")
+	}
+
+
+	fileName := filepath.Join(path, string(name))
+	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	enc := gob.NewEncoder(file)
+	err = enc.Encode(d.classes[name])
+
+	return nil
+}
 
 func (d *Detector) SaveProfiles() error {
 	path := d.config.ProfilePath + "/" + d.config.Profile
@@ -129,32 +156,35 @@ func (d *Detector) GenerateProfileFromWikiXML()  {
 
 	for _, f := range files {
 		lang := regName.FindStringSubmatch(f)[1]
-		if len(lang) < 2 {
+		if _,ok := d.classes[lang];ok || len(lang) < 2 {
 			continue;
 		}
-
-		for _, l := range d.config.Languages {
-			if l == lang {
-				xmlFiles[lang] = f
-				break;
-			}
-		}
+		d.classes[lang] = new(classData)
+		d.classes[lang].Freqs = make(map[string]float64);
+		xmlFiles[lang] = f
 	}
 
 
+	var wg sync.WaitGroup
+	for lang, file  := range xmlFiles {
+		wg.Add(1)
+		go d.processXml(lang, file, &wg)
+	}
+	wg.Wait()
+}
 
+func (d *Detector) processXml(lang string, file string, wg *sync.WaitGroup) {
+	defer wg.Done()
 	var text string
 	var strChan chan string
-
-	for lang, file  := range xmlFiles {
-		strChan = parseXml(file)
-		for text = range strChan {
-			d.Train(tokenize(text), lang)
-		}
-
-		d.ClearFreqsByClass(lang,2);
-		log.Println("Parsed ", lang)
+	strChan = parseXml(file)
+	for text = range strChan {
+		d.Train(tokenize(text), lang)
 	}
+
+	d.ClearFreqsByClass(lang,2)
+	d.SaveProfile(lang)
+	log.Println("Ready ", lang)
 }
 
 
@@ -183,9 +213,9 @@ func (d *Detector) ClearFreqs(min float64) {
 	}
 }
 
-func (d * Detector) Detect(text string, langs []string, coefficients map[string]float64, maxTrials int, maxIterations uint8) (res Response) {
+func (d * Detector) Detect(text string, langs []string, coefficients map[string]float64, maxTrials int, maxIterations uint16) (res Response) {
 
-	res.Languages = make(map[string]float64, len(d.classes))
+    res.Languages = make(map[string]float64, len(d.classes))
 
 	filteredLangs := []string{}
 	for _, l := range langs {
@@ -215,14 +245,19 @@ func (d * Detector) Detect(text string, langs []string, coefficients map[string]
 		maxIterations = MAX_ITTERATIONS
 	}
 
+	grnd := rng.NewGaussianGenerator(time.Now().UnixNano())
+	alpha := ALPHA_DEFAULT;
+
 	tempScores := make(map[string]map[int]float64, len(d.classes))
-	bases := d.getBaseProbs()
+	bases := d.getBaseProbs(langs)
 
 	trial := int(0)
 
 	tokenRandIterator := rand.Perm(len(tokens))
 
 	for trial = 0; trial < maxTrials; trial++ {
+		alpha = alpha + grnd.Gaussian(0.0, 1.0) * ALPHA_WIDTH;
+		weight := alpha / BASE_FREQ
 
 		if res.TokenProcessed >= len(tokenRandIterator) { break; }
 
@@ -231,10 +266,10 @@ func (d * Detector) Detect(text string, langs []string, coefficients map[string]
 			tempScores[name][trial] = bases[name]
 		}
 
-		iterationCounter := uint8(0)
+		iterationCounter := uint16(0)
 		for ; res.TokenProcessed < len(tokenRandIterator); res.TokenProcessed++ {
 			for _, name := range langs {
-				tempScores[name][trial] *= d.classes[name].getProb(tokens[tokenRandIterator[res.TokenProcessed]])
+				tempScores[name][trial] *= weight + d.classes[name].getProb(tokens[tokenRandIterator[res.TokenProcessed]])
 			}
 			if (iterationCounter % 5) == 0 {
 				if iterationCounter >= maxIterations { break }
@@ -276,19 +311,14 @@ func (d * Detector) Detect(text string, langs []string, coefficients map[string]
 	return
 }
 
-func (d *Detector) getBaseProbs() (baseProbs map[string]float64) {
-	n := len(d.classes)
+func (d *Detector) getBaseProbs(langs []string) (baseProbs map[string]float64) {
+	n := len(langs)
 	baseProbs = make(map[string]float64, n)
-	sum := 0
-	for name, class := range d.classes {
-		baseProbs[name] = float64(class.Total)
-		sum += class.Total
+
+	for _, lang := range langs {
+		baseProbs[lang] = 1.0 / float64(n)
 	}
-	if sum != 0 {
-		for name, _ := range d.classes {
-			baseProbs[name] /= float64(sum)
-		}
-	}
+
 	return
 }
 
@@ -365,7 +395,7 @@ func tokenize(text string) (tokens []string) {
 	words := strings.Fields(text)
 	var tks []*ngram.Token
 
-	for i := 1; i <= 3; i++ {
+	for i := 3; i <= 5; i++ {
 		for _, w := range words {
 			if i > 1 {
 				tks = ngram.NewTokenize(i, fmt.Sprint("_", w, "_")).Tokens()
@@ -380,7 +410,6 @@ func tokenize(text string) (tokens []string) {
 			}
 		}
 	}
-
 
 	return tokens
 }

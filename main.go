@@ -40,15 +40,14 @@ type httpRequestStruct struct {
 	Languages []string 				`json:"langs"`
 	Coefficients map[string]float64 `json:"coef"`
 	MaxTrials int	   				`json:"max_trials"`
-	MaxIterations uint8	   			`json:"max_iterations"`
+	MaxIterations uint16	   		`json:"max_iterations"`
 }
 
 func init() {
 	flag.StringVar(&defaultConfig.ProfilePath, "profile-path", "profiles", "Path to profiles directory")
 	flag.StringVar(&defaultConfig.XmlPath, "xml-path", "xml", "Path to wiki abstract DB directory")
-	flag.StringVar(&defaultConfig.Profile, "profile", "main", "Profile name to be loaded")
+	flag.StringVar(&defaultConfig.Profile, "profile", "main_3_7", "Profile name to be loaded")
 	flag.UintVar(&defaultConfig.Port, "port", 3000, "Port of HTTP listener")
-
 	flag.Parse()
 	defaultConfig.Action = flag.Arg(0)
 	if len(defaultConfig.Action) == 0 {
@@ -77,7 +76,7 @@ func main() {
 
 	if defaultConfig.Action == ACTION_GENPROFILE {
 		detection.GenerateProfileFromWikiXML()
-		detection.SaveProfiles()
+		//detection.SaveProfiles()
 		os.Exit(0)
 	}
 
