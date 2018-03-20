@@ -30,8 +30,8 @@ const ALPHA_WIDTH = 0.05
 
 const BASE_FREQ = 10000;
 
-const MAX_TRIALS = 15
-const MAX_ITTERATIONS = 255
+const MAX_TRIALS = 30
+const MAX_ITTERATIONS = 30
 const MIN_PROB = 0.000001
 
 
@@ -425,7 +425,7 @@ func getProfileAvailableLanguages(config DetectConfig) []string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	regName := regexp.MustCompile("^" + config.ProfilePath + "/" + config.Profile + "/([a-zA-Z0-9]+)$")
+	regName := regexp.MustCompile("^" + config.ProfilePath + "[/\\\\]{1}" + config.Profile + "[/\\\\]{1}([a-zA-Z0-9]+)$")
 	for _, f := range files {
 		match := regName.FindStringSubmatch(f);
 		if len(match) == 2 {
