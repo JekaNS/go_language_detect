@@ -397,6 +397,9 @@ func tokenize(text string) (tokens []string) {
 
 	for i := 3; i <= 5; i++ {
 		for _, w := range words {
+			if utf8.RuneCountInString(w) + 2 < i - 1 {
+				continue;
+			}
 			if i > 1 {
 				tks = ngram.NewTokenize(i, fmt.Sprint("_", w, "_")).Tokens()
 			} else {
