@@ -20,12 +20,8 @@ def production(branch_name='master', wwwroot='/opt/WWWRoot/go_language_detect/')
     env.server = 'prod'
     env.remotely = True
     env.hosts = [
-        '%s@daria01' % ("user",),
-        '%s@daria02' % ("user",),
-        '%s@daria03' % ("user",),
-        '%s@daria04' % ("user",),
-        '%s@daria05' % ("user",),
-        '%s@daria06' % ("user",),
+        '%s@gld01' % ("user",),
+        '%s@gld02' % ("user",),
     ]
     env.repo = wwwroot
     env.branch = branch_name
@@ -55,7 +51,6 @@ def restart():
     run("supervisorctl restart go_language_detect")
 
 @task
-@parallel
 def deploy():
     """
     Деплой без миграций
